@@ -30,10 +30,18 @@
   <aside class="sidebar">
     <section class="side-block">
       <div class="stat-grid">
-        <div class="stat"><b id="statTotal">–</b><span>技能总数</span></div>
-        <div class="stat warn"><b id="statAttention">–</b><span>需关注</span></div>
-        <div class="stat"><b id="statDup">–</b><span>重复</span></div>
-        <div class="stat"><b id="statStar">–</b><span>收藏</span></div>
+        <div class="stat" title="扫描到的全部技能，不含已归档">
+          <b id="statTotal">–</b><span>技能</span>
+        </div>
+        <div class="stat warn" id="statAttentionCell" title="每个技能只归类一次：重复 → 项目领先 → 沉睡 → 该复查">
+          <b id="statAttention">–</b><span>待处理</span>
+        </div>
+        <div class="stat" id="statDupCell" title="同名技能算一组">
+          <b id="statDup">–</b><span>重复组</span>
+        </div>
+        <div class="stat" title="你标记了收藏的技能">
+          <b id="statStar">–</b><span>收藏</span>
+        </div>
       </div>
     </section>
 

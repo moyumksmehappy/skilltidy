@@ -4,7 +4,7 @@ const $ = (s) => document.querySelector(s);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 
 const VIEWS = [
-  { id: 'attention', label: '需关注', fn: (s) => s.flags.stale || s.flags.dueReview || s.flags.drift },
+  { id: 'attention', label: '待处理', fn: (s) => needOf(s) !== null },
   { id: 'all', label: '全部技能', fn: () => true },
   { id: 'stale', label: '沉睡中', fn: (s) => s.flags.stale },
   { id: 'unreviewed', label: '从未审查', fn: (s) => s.flags.unreviewed },
@@ -38,6 +38,30 @@ const osLabel = (os) => OS_LABEL[os] || String(os || '?').toUpperCase().slice(0,
 const projLabel = (s) => (s.scope === 'global' ? '全局' : s.project);
 const projName = (p) => (p === 'global' ? '全局' : p);
 
+/**
+ * One skill belongs to exactly one bucket. Duplicates win over everything else,
+ * because a duplicate is the one problem you can actually fix by removing a
+ * folder. This is what makes the sidebar numbers add up instead of overlapping.
+ */
+function needOf(s) {
+  if (s.dupCount > 1) return 'dup';
+  if (s.flags.drift) return 'drift';
+  if (s.flags.stale) return 'stale';
+  if (s.flags.dueReview) return 'due';
+  return null;
+}
+
+function dupGroups(skills) {
+  const groups = {};
+  for (const s of skills) {
+    if (s.dupCount > 1) {
+      const k = s.name.toLowerCase();
+      (groups[k] = groups[k] || []).push(s);
+    }
+  }
+  return groups;
+}
+
 function relTime(ms) {
   if (!ms) return '—';
   const d = Math.floor((Date.now() - ms) / 86400000);
@@ -47,11 +71,32 @@ function relTime(ms) {
   if (d < 365) return Math.round(d / 30) + ' 个月前';
   return (d / 365).toFixed(1) + ' 年前';
 }
-function ageText(n) {
-  if (n <= 0) return '今天';
-  if (n < 30) return n + ' 天';
-  if (n < 365) return Math.round(n / 30) + ' 月';
-  return (n / 365).toFixed(1) + ' 年';
+/** Keep the current view in the URL so a refresh, a bookmark or a shared link
+ *  lands on the same slice of the list. The skill drawer keeps using the hash. */
+function syncUrl() {
+  const p = new URLSearchParams();
+  if (state.view !== 'attention') p.set('view', state.view);
+  if (state.q) p.set('q', state.q);
+  if (state.sort !== 'attention') p.set('sort', state.sort);
+  if (state.project) p.set('project', state.project);
+  if (state.device) p.set('device', state.device);
+  const qs = p.toString();
+  history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+}
+
+function readUrl() {
+  const p = new URLSearchParams(location.search);
+  const v = p.get('view');
+  if (v && VIEWS.some((x) => x.id === v)) state.view = v;
+  state.q = p.get('q') || '';
+  if (state.q) $('#q').value = state.q;
+  const sort = p.get('sort');
+  if (sort && $('#sort').querySelector('option[value="' + sort + '"]')) {
+    state.sort = sort;
+    $('#sort').value = sort;
+  }
+  state.project = p.get('project') || null;
+  state.device = p.get('device') || null;
 }
 function esc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -147,6 +192,7 @@ async function api(path, opts) {
 
 async function load() {
   state.data = await api('/api/state');
+  readUrl();
   render();
   const h = decodeURIComponent(location.hash.replace(/^#/, ''));
   if (h) {
@@ -195,11 +241,29 @@ function filterSkills() {
 }
 
 function render() {
-  const st = state.data.stats;
-  $('#statTotal').textContent = st.total;
-  $('#statAttention').textContent = state.data.skills.filter((s) => !s.meta.archived && (s.flags.stale || s.flags.dueReview || s.flags.drift)).length;
-  $('#statDup').textContent = st.dup;
-  $('#statStar').textContent = st.starred;
+  const active = state.data.skills.filter((s) => !s.meta.archived);
+
+  const buckets = { dup: 0, drift: 0, stale: 0, due: 0 };
+  for (const s of active) {
+    const k = needOf(s);
+    if (k) buckets[k]++;
+  }
+  const total = buckets.dup + buckets.drift + buckets.stale + buckets.due;
+
+  const groups = dupGroups(active);
+  const groupCount = Object.keys(groups).length;
+  const copyCount = Object.keys(groups).reduce((n, k) => n + groups[k].length, 0);
+
+  $('#statTotal').textContent = active.length;
+  $('#statAttention').textContent = total;
+  $('#statAttentionCell').title = total
+    ? ['每个技能只归类一次', `重复副本 ${buckets.dup} · 项目已领先 ${buckets.drift} · 沉睡 ${buckets.stale} · 该复查 ${buckets.due}`].join('\n')
+    : '没有需要处理的技能';
+  $('#statDup').textContent = groupCount;
+  $('#statDupCell').title = groupCount
+    ? `${groupCount} 组同名技能，共 ${copyCount} 份文件`
+    : '没有同名副本';
+  $('#statStar').textContent = active.filter((s) => s.meta.star).length;
 
   // nav
   const nav = $('#nav');
@@ -293,8 +357,9 @@ function render() {
 
     const tdTime = el('td', 'c-time');
     const tc = el('div', 'time-cell');
-    tc.appendChild(el('b', null, relTime(s.mtime)));
-    tc.appendChild(el('div', 'sub', '龄期 ' + ageText(s.ageDays)));
+    const when = el('b', null, relTime(s.mtime));
+    when.title = new Date(s.mtime).toLocaleString('zh-CN');
+    tc.appendChild(when);
     tdTime.appendChild(tc);
     tr.appendChild(tdTime);
 
@@ -325,9 +390,45 @@ function render() {
     frag.appendChild(tr);
   }
   tbody.appendChild(frag);
+
+  // Empty states differ by cause: an empty machine needs setup help, an empty
+  // filter needs an escape hatch. Showing "no skills" for all three is what
+  // makes a fresh install look broken.
   const empty = $('#empty');
   empty.hidden = list.length > 0;
-  if (!list.length) empty.textContent = state.q ? '没有匹配的技能' : '这个视图下暂时没有技能';
+  if (!list.length) {
+    empty.innerHTML = '';
+    const hasAny = state.data.skills.filter((s) => !s.meta.archived).length > 0;
+    if (!hasAny) {
+      empty.appendChild(el('h3', null, '还没有扫描到任何技能'));
+      empty.appendChild(el('p', null, '检查「设置」里的扫描位置是否正确，或在终端运行 skilltidy init 让它自己找。'));
+      const b = el('button', 'btn primary sm', '打开设置');
+      b.onclick = openSettings;
+      empty.appendChild(b);
+    } else if (state.q) {
+      empty.appendChild(el('h3', null, '没有匹配「' + state.q + '」的技能'));
+      empty.appendChild(el('p', null, '搜索会同时匹配名称、描述、项目、标签和路径。'));
+      const b = el('button', 'btn sm', '清除搜索');
+      b.onclick = () => { state.q = ''; $('#q').value = ''; render(); };
+      empty.appendChild(b);
+    } else if (state.project || state.device) {
+      empty.appendChild(el('h3', null, '这个筛选下没有符合条件的技能'));
+      empty.appendChild(el('p', null, '当前限定在' + [state.device, projName(state.project)].filter(Boolean).join(' · ')));
+      const b = el('button', 'btn sm', '清除筛选');
+      b.onclick = () => { state.project = null; state.device = null; render(); };
+      empty.appendChild(b);
+    } else {
+      empty.appendChild(el('h3', null, '这个视图下暂时没有技能'));
+      empty.appendChild(el('p', null, state.view === 'attention'
+        ? '所有技能要么已审查、要么还很新，暂时没有需要你动手的。'
+        : '换个视图看看，或者确认这个分类是否为空。'));
+      const b = el('button', 'btn sm', '看全部技能');
+      b.onclick = () => { state.view = 'all'; render(); };
+      empty.appendChild(b);
+    }
+  }
+
+  syncUrl();
 }
 
 /* ---------------- drawer ---------------- */
@@ -336,7 +437,7 @@ async function openDrawer(s) {
   state.current = s;
   state.editing = false;
   state.fileSel = 'SKILL.md';
-  history.replaceState(null, '', '#' + s.id);
+  history.replaceState(null, '', location.pathname + location.search + '#' + s.id);
   $('#drawer').hidden = false;
   $('#backdrop').hidden = false;
   $('#dName').textContent = s.name;
@@ -407,7 +508,7 @@ function closeDrawer() {
   $('#drawer').hidden = true;
   $('#backdrop').hidden = true;
   state.current = null;
-  history.replaceState(null, '', location.pathname);
+  history.replaceState(null, '', location.pathname + location.search);
 }
 
 /* ---------------- actions ---------------- */

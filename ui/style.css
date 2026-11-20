@@ -152,10 +152,11 @@ table.grid tbody tr:hover{background:#FCFCFA}
 .chip.unreviewed{background:var(--blue-soft);border-color:#D6E4F3;color:var(--accent)}
 .time-cell{font-size:12px;color:var(--muted)}
 .time-cell b{font-weight:400;color:var(--ink)}
-.time-cell .sub{font-size:11px;color:var(--faint)}
 .star{color:#C9C7BE;font-size:15px;line-height:1;background:none;border:none;cursor:pointer;padding:2px}
 .star.on{color:#C99A16}
-.empty{padding:60px 20px;text-align:center;color:var(--faint)}
+.empty{padding:64px 20px;text-align:center;color:var(--faint)}
+.empty h3{margin:0 0 6px;font-size:14px;font-weight:500;color:var(--ink)}
+.empty p{margin:0 auto 14px;font-size:12.5px;line-height:1.7;max-width:420px}
 
 /* ---------- drawer ---------- */
 .drawer-backdrop{
