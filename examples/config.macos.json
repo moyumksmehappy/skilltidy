@@ -1,0 +1,38 @@
+{
+  "_comment": "macOS example. ~/.claude/skills is global, ~/code is scanned for project skills.",
+  "version": 1,
+  "staleDays": 90,
+  "reviewDays": 45,
+  "roots": [
+    {
+      "id": "mac-claude-global",
+      "label": "Claude Code - global",
+      "path": "/Users/you/.claude/skills",
+      "device": "MacBook",
+      "scope": "global",
+      "kind": "mine",
+      "enabled": true
+    },
+    {
+      "id": "mac-codex-global",
+      "label": "Codex - global",
+      "path": "/Users/you/.codex/skills",
+      "device": "MacBook",
+      "scope": "global",
+      "kind": "mine",
+      "enabled": true
+    },
+    {
+      "id": "mac-projects",
+      "label": "code - projects",
+      "path": "/Users/you/code",
+      "device": "MacBook",
+      "scope": "project",
+      "kind": "mine",
+      "enabled": true,
+      "maxDepth": 6
+    }
+  ],
+  "skipDirs": [".git", "node_modules", ".venv", "__pycache__", "dist", "build", "target", "cache"],
+  "vendorPatterns": ["/node_modules/", "/.claude/plugins/marketplaces/"]
+}

@@ -1,0 +1,51 @@
+{
+  "name": "skilltidy",
+  "version": "0.1.0",
+  "description": "Tidy up the agent skills you wrote: find stale, duplicated and forgotten SKILL.md files across Windows, macOS, Linux and WSL, then keep track of what you already reviewed.",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "skilltidy": "bin/skilltidy.js"
+  },
+  "main": "lib/engine.js",
+  "files": [
+    "bin",
+    "lib",
+    "ui",
+    "examples",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start": "node bin/skilltidy.js ui",
+    "scan": "node bin/skilltidy.js scan",
+    "check": "node bin/skilltidy.js check"
+  },
+  "keywords": [
+    "agent-skills",
+    "skills",
+    "skill-md",
+    "claude-code",
+    "codex",
+    "wsl",
+    "cli",
+    "dashboard",
+    "inventory",
+    "maintenance",
+    "audit"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moyumksmehappy/skilltidy.git"
+  },
+  "homepage": "https://github.com/moyumksmehappy/skilltidy#readme",
+  "bugs": {
+    "url": "https://github.com/moyumksmehappy/skilltidy/issues"
+  },
+  "author": "moyumksmehappy",
+  "dependencies": {}
+}

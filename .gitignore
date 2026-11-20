@@ -1,0 +1,14 @@
+# deps
+node_modules/
+
+# local skilltidy state (never commit - it contains your own notes and machine paths)
+.skilltidy/
+config.json
+data/
+
+# os / editor noise
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/

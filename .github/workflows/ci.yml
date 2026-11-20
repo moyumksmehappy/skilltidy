@@ -1,0 +1,97 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Pure logic (frontmatter parsing, rule evaluation, duplicate grouping) must
+  # pass on every platform we claim to support.
+  test:
+    name: test ${{ matrix.os }} / node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['18', '20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: unit tests
+        run: npm test
+      - name: cli is executable
+        run: node bin/skilltidy.js --version
+
+  # End-to-end: pretend to be a new user on a clean machine, then make sure
+  # init -> scan -> check actually works and the JSON stays machine-readable.
+  smoke:
+    name: smoke (fresh machine)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: build a fake skills directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/home/.claude/skills/demo-skill"
+          cat > "$RUNNER_TEMP/home/.claude/skills/demo-skill/SKILL.md" <<'EOF'
+          ---
+          name: demo-skill
+          description: a demo skill used by CI
+          ---
+
+          # Demo
+
+          1. Step one.
+          EOF
+
+      - name: init detects it
+        env:
+          HOME: ${{ runner.temp }}/home
+          SKILLTIDY_HOME: ${{ runner.temp }}/state
+        run: node bin/skilltidy.js init
+
+      - name: scan finds exactly one skill
+        env:
+          HOME: ${{ runner.temp }}/home
+          SKILLTIDY_HOME: ${{ runner.temp }}/state
+        run: |
+          node bin/skilltidy.js scan --json > "$RUNNER_TEMP/out.json"
+          node -e '
+            const r = require(process.env.RUNNER_TEMP + "/out.json");
+            if (r.stats.total !== 1) {
+              console.error("expected 1 skill, got " + r.stats.total);
+              process.exit(1);
+            }
+            const s = r.skills[0];
+            if (s.name !== "demo-skill") { console.error("bad name: " + s.name); process.exit(1); }
+            if (s.os !== "linux") { console.error("bad os: " + s.os); process.exit(1); }
+            console.log("ok:", s.name, "|", s.scope, "|", s.status);
+          '
+
+      - name: check exits 0 when nothing is wrong
+        env:
+          HOME: ${{ runner.temp }}/home
+          SKILLTIDY_HOME: ${{ runner.temp }}/state
+        run: node bin/skilltidy.js check
+
+      - name: check exits 1 when unreviewed skills are gated
+        env:
+          HOME: ${{ runner.temp }}/home
+          SKILLTIDY_HOME: ${{ runner.temp }}/state
+        run: |
+          if node bin/skilltidy.js check --fail-on unreviewed; then
+            echo "expected exit 1 for --fail-on unreviewed, got 0"
+            exit 1
+          fi
+          echo "correctly exited non-zero"

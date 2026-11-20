@@ -1,0 +1,50 @@
+{
+  "_comment": "Windows + WSL example. Run `skilltidy init` to generate this automatically.",
+  "version": 1,
+  "port": 7788,
+  "staleDays": 90,
+  "reviewDays": 45,
+  "roots": [
+    {
+      "id": "win-claude-global",
+      "label": "Claude Code - global",
+      "path": "C:\\Users\\you\\.claude\\skills",
+      "device": "PC (win32)",
+      "scope": "global",
+      "kind": "mine",
+      "enabled": true
+    },
+    {
+      "id": "win-projects",
+      "label": "code - projects",
+      "path": "C:\\Users\\you\\code",
+      "device": "PC (win32)",
+      "scope": "project",
+      "kind": "mine",
+      "enabled": true,
+      "maxDepth": 6
+    },
+    {
+      "id": "wsl-ubuntu-claude",
+      "label": "WSL Ubuntu - Claude global",
+      "path": "\\\\wsl.localhost\\Ubuntu\\home\\you\\.claude\\skills",
+      "device": "WSL Ubuntu",
+      "scope": "global",
+      "kind": "mine",
+      "enabled": true
+    },
+    {
+      "id": "wsl-ubuntu-projects",
+      "label": "WSL Ubuntu - projects",
+      "path": "\\\\wsl.localhost\\Ubuntu\\home\\you\\pros",
+      "device": "WSL Ubuntu",
+      "scope": "project",
+      "kind": "mine",
+      "enabled": true,
+      "maxDepth": 8
+    }
+  ],
+  "skipDirs": [".git", "node_modules", ".venv", "__pycache__", "dist", "build", "target", "cache", ".tmp"],
+  "vendorPatterns": ["/node_modules/", "/.claude/plugins/marketplaces/"],
+  "git": { "enabled": true, "wsl": false }
+}

@@ -1,0 +1,48 @@
+{
+  "_comment": "Linux example, including a repo you clone from a shared library.",
+  "version": 1,
+  "staleDays": 60,
+  "reviewDays": 30,
+  "roots": [
+    {
+      "id": "linux-claude-global",
+      "label": "Claude Code - global",
+      "path": "/home/you/.claude/skills",
+      "device": "workstation",
+      "scope": "global",
+      "kind": "mine",
+      "enabled": true
+    },
+    {
+      "id": "linux-agents-global",
+      "label": "Agents - global",
+      "path": "/home/you/.agents/skills",
+      "device": "workstation",
+      "scope": "global",
+      "kind": "mine",
+      "enabled": true
+    },
+    {
+      "id": "linux-repos",
+      "label": "repos - projects",
+      "path": "/home/you/repos",
+      "device": "workstation",
+      "scope": "project",
+      "kind": "mine",
+      "enabled": true,
+      "maxDepth": 6
+    },
+    {
+      "id": "linux-vendor",
+      "label": "everything-claude-code (vendored)",
+      "path": "/home/you/vendor/everything-claude-code",
+      "device": "workstation",
+      "scope": "project",
+      "kind": "vendor",
+      "enabled": false,
+      "maxDepth": 4
+    }
+  ],
+  "skipDirs": [".git", "node_modules", ".venv", "__pycache__", "dist", "build", "target", "vendor/cache"],
+  "vendorPatterns": ["/node_modules/", "/everything-claude-code/"]
+}
