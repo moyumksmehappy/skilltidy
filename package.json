@@ -1,7 +1,7 @@
 {
   "name": "skilltidy",
-  "version": "0.1.0",
-  "description": "Tidy up the agent skills you wrote: find stale, duplicated and forgotten SKILL.md files across Windows, macOS, Linux and WSL, then keep track of what you already reviewed.",
+  "version": "0.2.0",
+  "description": "Find the skills that stopped being true: count the commits that landed after each SKILL.md was last touched, group duplicate copies across Windows and WSL, and keep a ledger of what you already confirmed.",
   "license": "MIT",
   "type": "commonjs",
   "bin": {
@@ -34,6 +34,7 @@
     "wsl",
     "cli",
     "dashboard",
+    "drift",
     "inventory",
     "maintenance",
     "audit"

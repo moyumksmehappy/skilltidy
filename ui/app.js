@@ -4,22 +4,22 @@ const $ = (s) => document.querySelector(s);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 
 const VIEWS = [
-  { id: 'attention', label: '待处理', fn: (s) => needOf(s) !== null },
+  { id: 'decisions', label: '待决策', fn: (s) => !!s.decision },
+  { id: 'attention', label: '待处理', fn: (s) => !!s.decision || s.flags.dueReview },
   { id: 'all', label: '全部技能', fn: () => true },
-  { id: 'stale', label: '沉睡中', fn: (s) => s.flags.stale },
-  { id: 'unreviewed', label: '从未审查', fn: (s) => s.flags.unreviewed },
+  { id: 'confirmed', label: '待确认', fn: (s) => s.flags.neverReviewed },
   { id: 'due', label: '该复查了', fn: (s) => s.flags.dueReview },
-  { id: 'dup', label: '重复副本', fn: (s) => s.flags.dup },
   { id: 'drift', label: '项目已领先', fn: (s) => s.flags.drift },
+  { id: 'dup', label: '重复副本', fn: (s) => s.flags.dup },
+  { id: 'stale', label: '很久没动', fn: (s) => s.flags.stale },
   { id: 'starred', label: '收藏', fn: (s) => s.meta.star },
-  { id: 'mine', label: '我写的', fn: (s) => s.kind !== 'vendor' },
   { id: 'vendor', label: '第三方 / 引用库', fn: (s) => s.kind === 'vendor' },
   { id: 'archived', label: '已归档', fn: (s) => s.meta.archived, archived: true }
 ];
 
 const state = {
   data: null,
-  view: 'attention',
+  view: 'decisions',
   q: '',
   device: null,
   project: null,
@@ -38,29 +38,7 @@ const osLabel = (os) => OS_LABEL[os] || String(os || '?').toUpperCase().slice(0,
 const projLabel = (s) => (s.scope === 'global' ? '全局' : s.project);
 const projName = (p) => (p === 'global' ? '全局' : p);
 
-/**
- * One skill belongs to exactly one bucket. Duplicates win over everything else,
- * because a duplicate is the one problem you can actually fix by removing a
- * folder. This is what makes the sidebar numbers add up instead of overlapping.
- */
-function needOf(s) {
-  if (s.dupCount > 1) return 'dup';
-  if (s.flags.drift) return 'drift';
-  if (s.flags.stale) return 'stale';
-  if (s.flags.dueReview) return 'due';
-  return null;
-}
-
-function dupGroups(skills) {
-  const groups = {};
-  for (const s of skills) {
-    if (s.dupCount > 1) {
-      const k = s.name.toLowerCase();
-      (groups[k] = groups[k] || []).push(s);
-    }
-  }
-  return groups;
-}
+const DECISION_LABEL = { drift: '项目已领先', dup: '重复副本' };
 
 function relTime(ms) {
   if (!ms) return '—';
@@ -75,7 +53,7 @@ function relTime(ms) {
  *  lands on the same slice of the list. The skill drawer keeps using the hash. */
 function syncUrl() {
   const p = new URLSearchParams();
-  if (state.view !== 'attention') p.set('view', state.view);
+  if (state.view !== 'decisions') p.set('view', state.view);
   if (state.q) p.set('q', state.q);
   if (state.sort !== 'attention') p.set('sort', state.sort);
   if (state.project) p.set('project', state.project);
@@ -217,7 +195,7 @@ async function scan() {
 /* ---------------- render ---------------- */
 
 function filterSkills() {
-  const v = VIEWS.find((x) => x.id === state.view) || VIEWS[1];
+  const v = VIEWS.find((x) => x.id === state.view) || VIEWS[0];
   let list = state.data.skills.filter((s) => (v.archived ? s.meta.archived : !s.meta.archived));
   list = list.filter(v.fn);
   if (state.device) list = list.filter((s) => s.device === state.device);
@@ -228,42 +206,46 @@ function filterSkills() {
       (s.name + ' ' + s.description + ' ' + s.project + ' ' + (s.meta.tags || []).join(' ') + ' ' + s.rel)
         .toLowerCase().includes(q));
   }
-  const score = (s) => (s.flags.stale ? 100 : 0) + (s.flags.drift ? 50 : 0) + (s.flags.dueReview ? 40 : 0) + (s.flags.unreviewed ? 20 : 0) + (s.flags.aging ? 8 : 0);
-  const sorters = {
+  const score = (s) => (s.flags.drift ? 100 : 0)
+    + (s.flags.dup ? 80 : 0)
+    + (s.flags.dueReview ? 40 : 0)
+    + (s.flags.stale ? 20 : 0)
+    + (s.flags.neverReviewed ? 10 : 0)
+    + (s.flags.aging ? 4 : 0);
+  const sorts = {
     attention: (a, b) => score(b) - score(a) || b.ageDays - a.ageDays,
+    review: (a, b) => (a.meta.reviewedAt ? new Date(a.meta.reviewedAt).getTime() : -1)
+      - (b.meta.reviewedAt ? new Date(b.meta.reviewedAt).getTime() : -1),
     mtime: (a, b) => b.mtime - a.mtime,
     name: (a, b) => a.name.localeCompare(b.name, 'zh'),
     project: (a, b) => (a.project + a.name).localeCompare(b.project + b.name, 'zh'),
     age: (a, b) => b.ageDays - a.ageDays
   };
-  list.sort(sorters[state.sort] || sorters.attention);
+  list.sort(sorts[state.sort] || sorts.attention);
   return list;
 }
 
 function render() {
   const active = state.data.skills.filter((s) => !s.meta.archived);
 
-  const buckets = { dup: 0, drift: 0, stale: 0, due: 0 };
-  for (const s of active) {
-    const k = needOf(s);
-    if (k) buckets[k]++;
-  }
-  const total = buckets.dup + buckets.drift + buckets.stale + buckets.due;
-
-  const groups = dupGroups(active);
-  const groupCount = Object.keys(groups).length;
-  const copyCount = Object.keys(groups).reduce((n, k) => n + groups[k].length, 0);
+  const drift = active.filter((s) => s.flags.drift).length;
+  const dup = active.filter((s) => s.flags.dup).length;
+  const decisions = active.filter((s) => !!s.decision).length;
+  const never = active.filter((s) => s.flags.neverReviewed).length;
+  const reviewed = active.length - never;
+  const pct = active.length ? Math.round((reviewed / active.length) * 100) : 0;
 
   $('#statTotal').textContent = active.length;
-  $('#statAttention').textContent = total;
-  $('#statAttentionCell').title = total
-    ? ['每个技能只归类一次', `重复副本 ${buckets.dup} · 项目已领先 ${buckets.drift} · 沉睡 ${buckets.stale} · 该复查 ${buckets.due}`].join('\n')
-    : '没有需要处理的技能';
-  $('#statDup').textContent = groupCount;
-  $('#statDupCell').title = groupCount
-    ? `${groupCount} 组同名技能，共 ${copyCount} 份文件`
-    : '没有同名副本';
-  $('#statStar').textContent = active.filter((s) => s.meta.star).length;
+  $('#statDecision').textContent = decisions;
+  $('#statDecisionCell').title = decisions
+    ? ['有证据说明它可能不对', `项目已领先 ${drift} · 重复副本 ${dup}`].join('\n')
+    : '没有发现需要决策的技能';
+  $('#statConfirmed').textContent = never;
+  $('#statConfirmedCell').title = never
+    ? `${never} 个技能你还没确认过它是否仍然成立`
+    : '全部确认过了';
+  $('#statReviewed').textContent = reviewed;
+  $('#statReviewedCell').title = `账本覆盖 ${pct}%（${reviewed}/${active.length}）`;
 
   // nav
   const nav = $('#nav');
@@ -351,9 +333,24 @@ function render() {
     const tdLoc = el('td', 'c-loc');
     const ll = el('div', 'loc-line');
     ll.appendChild(el('span', 'chip ' + (s.os === 'wsl' ? 'wsl' : 'win'), osLabel(s.os)));
-    ll.appendChild(el('span', null, projLabel(s)));
+    const pj = el('span', 'proj', projLabel(s));
+    pj.title = projLabel(s);
+    ll.appendChild(pj);
     tdLoc.appendChild(ll);
     tr.appendChild(tdLoc);
+
+    // The ledger, moved out of the drawer and into the list: the question this
+    // tool exists to answer is "when did I last confirm this still holds".
+    const tdConfirm = el('td', 'c-confirm');
+    if (s.meta.reviewedAt) {
+      const b = el('b', null, s.sinceReview === 0 ? '今天' : s.sinceReview + ' 天前');
+      if (s.flags.dueReview) b.className = 'confirm-due';
+      b.title = new Date(s.meta.reviewedAt).toLocaleString('zh-CN');
+      tdConfirm.appendChild(b);
+    } else {
+      tdConfirm.appendChild(el('span', 'confirm-never', '从没'));
+    }
+    tr.appendChild(tdConfirm);
 
     const tdTime = el('td', 'c-time');
     const tc = el('div', 'time-cell');
@@ -364,11 +361,9 @@ function render() {
     tr.appendChild(tdTime);
 
     const tdB = el('td', 'c-badge');
-    if (s.flags.stale) tdB.appendChild(el('span', 'chip stale', '沉睡'));
-    else if (s.flags.dueReview) tdB.appendChild(el('span', 'chip due', '该复查'));
-    else if (s.flags.unreviewed) tdB.appendChild(el('span', 'chip unreviewed', '未审查'));
-    if (s.flags.dup) tdB.appendChild(el('span', 'chip dup', '重复 ×' + s.dupCount));
-    if (s.flags.drift) tdB.appendChild(el('span', 'chip drift', '项目已更新'));
+    if (s.flags.drift) tdB.appendChild(el('span', 'chip drift', '提交 +' + s.driftCommits));
+    if (s.flags.dup) tdB.appendChild(el('span', 'chip dup', '同名 ×' + s.dupCount));
+    if (s.flags.dueReview) tdB.appendChild(el('span', 'chip due', '该复查'));
     if (s.worktree) tdB.appendChild(el('span', 'chip wt', 'worktree'));
     (s.meta.tags || []).slice(0, 2).forEach((t) => tdB.appendChild(el('span', 'chip', t)));
     tr.appendChild(tdB);
@@ -381,7 +376,6 @@ function render() {
       s.meta.star = !s.meta.star;
       star.textContent = s.meta.star ? '★' : '☆';
       star.classList.toggle('on', s.meta.star);
-      $('#statStar').textContent = state.data.skills.filter((x) => x.meta.star).length;
     };
     tdStar.appendChild(star);
     tr.appendChild(tdStar);
@@ -419,8 +413,8 @@ function render() {
       empty.appendChild(b);
     } else {
       empty.appendChild(el('h3', null, '这个视图下暂时没有技能'));
-      empty.appendChild(el('p', null, state.view === 'attention'
-        ? '所有技能要么已审查、要么还很新，暂时没有需要你动手的。'
+      empty.appendChild(el('p', null, state.view === 'decisions'
+        ? '没有发现证据说哪个技能不对：没有项目领先、没有重复副本。剩下的只是你还没确认过，去「待确认」里过一遍。'
         : '换个视图看看，或者确认这个分类是否为空。'));
       const b = el('button', 'btn sm', '看全部技能');
       b.onclick = () => { state.view = 'all'; render(); };
@@ -466,9 +460,13 @@ function renderDrawerMeta(s) {
   box.appendChild(el('span', 'chip', s.scope === 'global' ? '全局技能' : '项目技能'));
   box.appendChild(el('span', 'chip', projLabel(s)));
   box.appendChild(el('span', 'chip', '更新于 ' + relTime(s.mtime)));
-  box.appendChild(el('span', 'chip', '审查 ' + (s.meta.reviewedAt ? relTime(new Date(s.meta.reviewedAt).getTime()) : '从未')));
+  box.appendChild(el('span', 'chip', '上次确认 ' + (s.meta.reviewedAt ? relTime(new Date(s.meta.reviewedAt).getTime()) : '从没')));
   if (s.flags.dup) box.appendChild(el('span', 'chip dup', '同名 ×' + s.dupCount + (s.sameContentCount > 1 ? ' · 同内容 ×' + s.sameContentCount : '')));
-  if (s.flags.drift) box.appendChild(el('span', 'chip drift', '项目提交领先 ' + s.driftDays + ' 天'));
+  if (s.flags.drift) {
+    const c = el('span', 'chip drift', '技能上次改动后，仓库又提交了 ' + s.driftCommits + ' 次');
+    c.title = s.skillCommit ? '技能最后改动于 ' + s.skillCommit : '';
+    box.appendChild(c);
+  }
   $('#dStar').textContent = s.meta.star ? '取消收藏' : '收藏';
   $('#dArchive').textContent = s.meta.archived ? '取消归档' : '归档';
 }
@@ -537,8 +535,8 @@ function bind() {
   $('#dReview').onclick = async () => {
     await patchMeta({ reviewedAt: new Date().toISOString() });
     $('#dSaveHint').textContent = '';
-    $('#dReview').textContent = '已标记 ✓';
-    setTimeout(() => { $('#dReview').textContent = '标记已审查'; }, 1400);
+    $('#dReview').textContent = '已记入账本 ✓';
+    setTimeout(() => { $('#dReview').textContent = '确认仍然成立'; }, 1400);
   };
   $('#dArchive').onclick = async () => {
     const want = !state.current.meta.archived;

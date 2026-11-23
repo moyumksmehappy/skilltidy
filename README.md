@@ -1,27 +1,32 @@
 # SkillTidy
 
-**Tidy up the agent skills you wrote.**
+**Know which skills still hold, and which ones you already checked.**
 
-`apm` and `asm` get skills *installed*. SkillTidy deals with what happens afterwards:
-the skill you wrote six months ago, forked into three worktrees, half-superseded by a
-change in the repo, and never opened again.
+`apm` and `asm` get skills *installed*. Nothing looks after them afterwards: the skill
+you wrote six months ago, forked into three worktrees, describing a CLI that has since
+been renamed.
 
-- Scans every `SKILL.md` across **Windows, macOS, Linux and WSL**, in one list
-- Flags **stale** (untouched for months), **duplicated** (same skill, many copies),
-  **drifted** (the project moved on, the skill didn't), **never reviewed**
-- Local dashboard on `127.0.0.1` — read, edit, tag, archive, mark as reviewed
-- **Zero dependencies.** No telemetry, no network calls, read-only by default
+SkillTidy answers two questions and ignores the rest:
+
+- **Which copy is the real one?** The same skill in five repos, three of them worktree leftovers.
+- **When did I last confirm this still holds?** A record only you can keep.
+
+Everything else follows: it counts **drift** (commits that landed after the skill was
+last touched) instead of guessing from file age, it reads **Windows and WSL in one
+list**, and it keeps your confirmations in a local ledger. Zero dependencies, no
+network calls, read-only by default.
 
 ![SkillTidy dashboard](https://raw.githubusercontent.com/moyumksmehappy/skilltidy/main/docs/screenshot.png)
 
 ```
-  SkillTidy - 11 skills  (0.2s, 1 root)
-  6 stale   0 due for review   3 duplicated   0 vendor   8 never reviewed
+  SkillTidy - 9 skills  (0.3s, 1 root)
+  7 need a decision   3 confirmed   6 never confirmed
+  7 drifted   9 untouched 90d+   0 vendor
 
-NAME                          AGE      STATE        SCOPE    PROJECT                OS
-deploy-runbook                214d     stale        project  acme-api               windows
-terraform-review              189d     stale        project  infra                  windows
-component-review              165d     stale        project  web-dashboard          windows
+NAME                STATE       CONFIRMED  UPDATED  SCOPE    PROJECT
+deploy-runbook      drift +31   never      238d     project  personal-site
+terraform-review    drift +18   never      95d      project  infra
+api-conventions     ok          6d ago     238d     project  acme-api
 ```
 
 ## Quick start
@@ -58,15 +63,37 @@ and inside every WSL distro.
 
 | Flag | Meaning | Default |
 |---|---|---|
-| `stale` | `SKILL.md` untouched for longer than `staleDays` | 90 days |
-| `due` | You confirmed it `reviewDays` ago, time to look again | 45 days |
-| `unreviewed` | Never marked as reviewed — the initial state of everything | — |
+| `drift` | N commits landed in the repo after the skill was last touched | >= 10 commits |
 | `dup` | Other skills share the same name (possibly different content) | — |
-| `drift` | The project has commits newer than the skill | > 7 days |
+| `due` | You confirmed it `reviewDays` ago, time to look again | 45 days |
+| `stale` | `SKILL.md` untouched for longer than `staleDays` — informational, not a decision | 90 days |
+| `never` | Never confirmed. The initial state of everything | — |
 
-"Mark as reviewed" is the load-bearing action. It changes no files — it records that
-you looked at the skill and decided it is still correct. Without it every list turns
-into a wall of red and you stop reading it.
+Only `drift` and `dup` are **decisions**: cases where the tool can point at evidence
+that something is off. "You have not looked at this yet" is bookkeeping, not a finding.
+
+"Confirm still holds" is the load-bearing action. It writes no files — it records that
+you looked at the skill and decided it is still correct, and a confirmation newer than
+the newest commit settles the drift.
+
+## How drift is measured
+
+Drift is a commit count, not an age. For each skill, SkillTidy finds the last commit
+that touched its folder, then counts how many commits landed in that repo since:
+
+```
+diagnose  ->  1294 commits since the skill was last edited
+```
+
+A skill untouched for a year that describes an unchanged process is fine. A skill
+edited last week that points at a renamed flag is not. Counting commits is the only
+cheap signal that tells those two apart.
+
+Cost: one `rev-list` per repo plus one `git log -1` per skill folder, so large
+histories stay cheap. On WSL the whole loop runs inside the distro in a single
+`wsl.exe` call. Drift is skipped for worktrees (duplicated history), vendor packs
+(someone else's repo), and when no working git binary can be found — `SKILLTIDY_DEBUG=1`
+prints which binary was chosen.
 
 ## Why not just use `asm` / `apm` / a registry?
 
@@ -80,10 +107,11 @@ There are already a few local dashboards that *list* your skills. The gaps they 
 are the two this project was built around:
 
 - **Nothing crosses the WSL boundary.** Your skills are usually half on Windows, half
-  inside a distro, in repos that no host-side scanner will ever walk.
-- **Nothing tracks time.** Listing skills is easy; knowing which ones rotted, which
-  copies are stale forks in a worktree, and which you already reviewed is the part
-  that decides whether the list stays useful after week one.
+  inside a distro, in repos that no host-side scanner will ever walk. Which means
+  "this is the same skill in three places" is a claim nobody else can make.
+- **Nothing knows when you last looked.** Listing is easy; the hard part is that a
+  skill only rots relative to reality. SkillTidy keeps the one piece of data no linter
+  can generate — your confirmations — and checks it against the commit history.
 
 ## Multi-device
 
@@ -109,6 +137,8 @@ machine as long as the root is named the same.
 {
   "staleDays": 90,
   "reviewDays": 45,
+  "driftCommits": 10,
+  "git": { "enabled": true, "wsl": true },
   "roots": [
     {
       "id": "wsl-pros",
@@ -132,6 +162,8 @@ machine as long as the root is named the same.
 - `skipDirs` — plugin caches. Skipping these matters: one `.codex/.tmp/plugins` folder
   can contain 600 skills and drown the list
 - `vendorPatterns` — path fragments marking a skill as third-party
+- `driftCommits` — how many commits after a skill's last edit count as drift
+- `git.wsl` — set `false` if you do not want git called inside a distro
 
 See `examples/` for macOS, Linux and Windows+WSL starting points.
 
@@ -146,16 +178,18 @@ Two adapters, chosen by path shape:
   (89s vs 1s on a mid-size repo). The script is passed as base64: `wsl.exe` mangles
   `$variables` and single quotes in forwarded command lines.
 
-Git drift uses `git -C <project> log -1`. It is skipped for WSL by default
-(`git.wsl: false`) so scanning never wakes a stopped distro.
+Git is resolved by probing `where`/`which` output and keeping the first binary that
+actually prints a version: on some machines the bare name hits a shim that exits
+silently, which would quietly report zero drift everywhere.
 
 ## In CI
 
 ```yaml
-- run: npx skilltidy check --fail-on stale,dup --days 120
+- run: npx skilltidy check --fail-on drift --drift-commits 25
 ```
 
-Useful in a repo that ships its own skills: fail the build when they rot.
+Useful in a repo that ships its own skills: fail the build when the code has moved on
+far enough that the instructions are probably lying.
 
 ## Non-goals
 
@@ -164,15 +198,20 @@ It reads what other tools wrote and tells you the truth about it.
 
 ## 中文速览
 
-`apm`/`asm` 管技能怎么装，SkillTidy 管技能有没有烂在那儿。
+`apm`/`asm` 管技能怎么装，SkillTidy 管技能还成不成立。
+
+它只回答两个问题：**哪一份才是正本**，以及**你上次确认它还成立是什么时候**。
+
+「项目已领先」数的是提交次数 —— 技能上次改动之后，仓库又提交了多少次，而不是
+文件放了多久。放了一年但流程没变，不算问题；上周改的却指向一个已经改名的参数，才算。
 
 ```bash
 npx skilltidy init   # 自动探测本机与 WSL 里的技能目录
-npx skilltidy scan   # 看看自己到底写了多少
+npx skilltidy scan   # 看看自己到底写了多少，哪些需要决策
 npx skilltidy ui     # 打开看板 http://127.0.0.1:7788
 ```
 
-零依赖、不联网、默认只读。星标/标签/备注/审查记录存在 `~/.skilltidy/meta.json`，
+零依赖、不联网、默认只读。星标/标签/备注/确认记录存在 `~/.skilltidy/meta.json`，
 可以跨设备导出导入。详见 `examples/config.windows-wsl.json`。
 
 ## License

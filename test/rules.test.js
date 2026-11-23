@@ -27,18 +27,20 @@ test('fresh skill nobody reviewed is flagged unreviewed, not stale', () => {
   const s = rules.decorate(skill({ mtime: ago(5) }), null, { staleDays: 90, reviewDays: 45 });
   assert.strictEqual(s.flags.stale, false);
   assert.strictEqual(s.flags.unreviewed, true);
-  assert.strictEqual(s.status, 'unreviewed');
+  assert.strictEqual(s.flags.neverReviewed, true);
+  assert.strictEqual(s.status, 'new');
 });
 
-test('stale wins over unreviewed', () => {
-  const s = rules.decorate(skill({ mtime: ago(120) }), null, { staleDays: 90 });
+test('age alone does not make a skill a decision', () => {
+  const s = rules.decorate(skill({ mtime: ago(400) }), null, { staleDays: 90 });
   assert.strictEqual(s.flags.stale, true);
-  assert.strictEqual(s.status, 'stale');
+  assert.strictEqual(s.decision, null, 'being old is not evidence of being wrong');
 });
 
 test('reviewed long ago becomes due for review', () => {
   const s = rules.decorate(skill({ mtime: ago(5) }), { reviewedAt: new Date(ago(60)).toISOString() }, { reviewDays: 45 });
   assert.strictEqual(s.flags.unreviewed, false);
+  assert.strictEqual(s.flags.reviewed, true);
   assert.strictEqual(s.flags.dueReview, true);
   assert.strictEqual(s.status, 'due');
 });
@@ -59,10 +61,63 @@ test('duplicate flag follows dupCount', () => {
   assert.strictEqual(rules.decorate(skill({ dupCount: 1 }), null, {}).flags.dup, false);
 });
 
-test('drift needs more than a week and a known commit', () => {
-  assert.strictEqual(rules.decorate(skill({ driftDays: 3 }), null, {}).flags.drift, false);
-  assert.strictEqual(rules.decorate(skill({ driftDays: 30 }), null, {}).flags.drift, true);
-  assert.strictEqual(rules.decorate(skill({ driftDays: null }), null, {}).flags.drift, false);
+test('drift is a commit count, not a date', () => {
+  const cfg = { driftCommits: 10 };
+  assert.strictEqual(rules.decorate(skill({ driftCommits: 9 }), null, cfg).flags.drift, false);
+  assert.strictEqual(rules.decorate(skill({ driftCommits: 10 }), null, cfg).flags.drift, true);
+  assert.strictEqual(rules.decorate(skill({ driftCommits: 0 }), null, cfg).flags.drift, false);
+  assert.strictEqual(rules.decorate(skill({ driftCommits: null }), null, cfg).flags.drift, false);
+  assert.strictEqual(rules.decorate(skill({ driftCommits: undefined }), null, cfg).flags.drift, false);
+});
+
+test('drift threshold is configurable', () => {
+  assert.strictEqual(rules.decorate(skill({ driftCommits: 30 }), null, { driftCommits: 50 }).flags.drift, false);
+  assert.strictEqual(rules.decorate(skill({ driftCommits: 30 }), null, { driftCommits: 20 }).flags.drift, true);
+});
+
+test('a confirmation newer than the last commit settles the drift', () => {
+  const head = ago(30);
+  const base = { driftCommits: 40, projectHeadAt: head };
+  const stale = rules.decorate(skill(base), null, { driftCommits: 10 });
+  assert.strictEqual(stale.flags.drift, true);
+
+  const afterHead = rules.decorate(skill(base), { reviewedAt: new Date(ago(2)).toISOString() }, { driftCommits: 10 });
+  assert.strictEqual(afterHead.flags.drift, false);
+  assert.strictEqual(afterHead.flags.driftSettled, true);
+  assert.strictEqual(afterHead.decision, null);
+
+  const beforeHead = rules.decorate(skill(base), { reviewedAt: new Date(ago(60)).toISOString() }, { driftCommits: 10 });
+  assert.strictEqual(beforeHead.flags.drift, true, 'confirming before the commits landed does not count');
+});
+
+test('drift outranks duplicate as the decision', () => {
+  const both = rules.decorate(skill({ driftCommits: 50, dupCount: 3 }), null, { driftCommits: 10 });
+  assert.strictEqual(both.decision, 'drift');
+  const dupOnly = rules.decorate(skill({ driftCommits: 0, dupCount: 3 }), null, { driftCommits: 10 });
+  assert.strictEqual(dupOnly.decision, 'dup');
+});
+
+test('a reviewed skill stops being a decision but can still be due', () => {
+  const s = rules.decorate(skill({ driftCommits: 0, dupCount: 1, mtime: ago(200) }),
+    { reviewedAt: new Date(ago(2)).toISOString() }, { driftCommits: 10, staleDays: 90 });
+  assert.strictEqual(s.decision, null);
+  assert.strictEqual(s.flags.reviewed, true);
+  assert.strictEqual(s.flags.dueReview, false);
+  assert.strictEqual(s.status, 'fresh');
+});
+
+test('summarize counts decisions and the ledger separately', () => {
+  const list = [
+    rules.decorate(skill({ id: 'a', driftCommits: 30 }), null, { driftCommits: 10 }),
+    rules.decorate(skill({ id: 'b', dupCount: 2 }), null, {}),
+    rules.decorate(skill({ id: 'c', mtime: ago(300) }), { reviewedAt: new Date(ago(1)).toISOString() }, {})
+  ];
+  const st = rules.summarize(list);
+  assert.strictEqual(st.decisions, 2);
+  assert.strictEqual(st.drift, 1);
+  assert.strictEqual(st.dup, 1);
+  assert.strictEqual(st.reviewed, 1);
+  assert.strictEqual(st.unreviewed, 2);
 });
 
 test('summarize ignores archived skills', () => {

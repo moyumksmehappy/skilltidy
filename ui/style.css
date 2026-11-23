@@ -121,14 +121,21 @@ table.grid tbody tr{cursor:pointer}
 table.grid tbody tr:hover{background:#FCFCFA}
 .c-dot{width:26px;padding-left:14px !important}
 .c-name{width:auto}
-.c-loc{width:190px}
+.c-loc{width:200px}
+.c-confirm{width:88px;white-space:nowrap;font-size:12px}
 .c-time{width:84px;white-space:nowrap}
 .c-badge{width:210px}
 .c-star{width:34px;text-align:center}
+.c-confirm b{font-weight:400;color:var(--ink)}
+.c-confirm b.confirm-due{color:var(--amber)}
+.confirm-never{color:var(--faint)}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-top:5px}
 .dot.fresh{background:var(--green)}
 .dot.aging{background:var(--amber)}
 .dot.due{background:var(--amber)}
+.dot.drift{background:var(--red)}
+.dot.dup{background:var(--amber)}
+.dot.new{background:var(--accent)}
 .dot.unreviewed{background:var(--accent)}
 .dot.stale{background:var(--red)}
 .skill-name{font-weight:500;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -136,7 +143,8 @@ table.grid tbody tr:hover{background:#FCFCFA}
   color:var(--muted);font-size:12px;margin-top:2px;
   display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;
 }
-.loc-line{font-size:12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.loc-line{font-size:12px;display:flex;align-items:center;gap:6px;flex-wrap:nowrap}
+.loc-line .proj{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chip{
   display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:4px;
   font-size:10.5px;background:var(--panel-2);border:1px solid var(--line-soft);color:var(--muted);

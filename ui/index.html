@@ -33,14 +33,14 @@
         <div class="stat" title="扫描到的全部技能，不含已归档">
           <b id="statTotal">–</b><span>技能</span>
         </div>
-        <div class="stat warn" id="statAttentionCell" title="每个技能只归类一次：重复 → 项目领先 → 沉睡 → 该复查">
-          <b id="statAttention">–</b><span>待处理</span>
+        <div class="stat warn" id="statDecisionCell" title="有证据说明它可能不对">
+          <b id="statDecision">–</b><span>待决策</span>
         </div>
-        <div class="stat" id="statDupCell" title="同名技能算一组">
-          <b id="statDup">–</b><span>重复组</span>
+        <div class="stat" id="statConfirmedCell" title="你还没确认过它是否仍然成立">
+          <b id="statConfirmed">–</b><span>待确认</span>
         </div>
-        <div class="stat" title="你标记了收藏的技能">
-          <b id="statStar">–</b><span>收藏</span>
+        <div class="stat" id="statReviewedCell" title="账本：你确认过仍然成立的技能">
+          <b id="statReviewed">–</b><span>已确认</span>
         </div>
       </div>
     </section>
@@ -70,7 +70,8 @@
       <div class="list-title"><b id="viewTitle">全部技能</b> <span id="viewCount"></span></div>
       <div class="list-tools">
         <select id="sort">
-          <option value="attention">按需关注度</option>
+          <option value="attention">按需决策</option>
+          <option value="review">按上次确认</option>
           <option value="mtime">按更新时间</option>
           <option value="name">按名称</option>
           <option value="project">按项目</option>
@@ -85,6 +86,7 @@
             <th class="c-dot"></th>
             <th class="c-name">技能</th>
             <th class="c-loc">位置</th>
+            <th class="c-confirm">上次确认</th>
             <th class="c-time">更新</th>
             <th class="c-badge">标记</th>
             <th class="c-star"></th>
@@ -110,7 +112,7 @@
   <div class="drawer-meta" id="dMeta"></div>
 
   <div class="drawer-actions">
-    <button class="btn primary sm" id="dReview">标记已审查</button>
+    <button class="btn primary sm" id="dReview">确认仍然成立</button>
     <button class="btn sm" id="dStar">收藏</button>
     <button class="btn sm" id="dOpen">打开文件夹</button>
     <button class="btn sm" id="dEdit">编辑</button>
