@@ -56,6 +56,11 @@
     </section>
 
     <section class="side-block">
+      <h3>标签 <span class="hint" id="tagClear" hidden>清除</span></h3>
+      <ul class="nav small scroll" id="tagList"></ul>
+    </section>
+
+    <section class="side-block">
       <h3>项目</h3>
       <ul class="nav small scroll" id="projList"></ul>
     </section>
@@ -116,6 +121,7 @@
     <button class="btn sm" id="dStar">收藏</button>
     <button class="btn sm" id="dOpen">打开文件夹</button>
     <button class="btn sm" id="dEdit">编辑</button>
+    <button class="btn sm" id="dToggle" title="改名 SKILL.md，让 agent 不再加载它">停用</button>
     <button class="btn sm danger" id="dArchive">归档</button>
   </div>
 
@@ -147,6 +153,7 @@
         <span>标签（逗号分隔）</span>
         <input id="dTags" placeholder="后端, 已上线">
       </label>
+      <div class="tag-suggest" id="dTagSuggest"></div>
       <label class="field">
         <span>备注 / 下次要改什么</span>
         <textarea id="dNote" rows="5" placeholder="例：等 k8s 权限模型定了再补一段"></textarea>

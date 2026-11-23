@@ -14,8 +14,20 @@ const VIEWS = [
   { id: 'stale', label: '很久没动', fn: (s) => s.flags.stale },
   { id: 'starred', label: '收藏', fn: (s) => s.meta.star },
   { id: 'vendor', label: '第三方 / 引用库', fn: (s) => s.kind === 'vendor' },
+  { id: 'disabled', label: '已停用', fn: (s) => s.flags.disabled, off: true },
   { id: 'archived', label: '已归档', fn: (s) => s.meta.archived, archived: true }
 ];
+
+/**
+ * One definition of what each view contains, shared by the list and by the
+ * counter next to the view name. Archived and disabled skills are pulled out of
+ * every normal view: they are not asking for attention any more.
+ */
+function inView(s, v) {
+  if (v.archived) return s.meta.archived;
+  if (v.off) return !s.meta.archived && s.flags.disabled;
+  return !s.meta.archived && !s.flags.disabled && v.fn(s);
+}
 
 const state = {
   data: null,
@@ -23,6 +35,7 @@ const state = {
   q: '',
   device: null,
   project: null,
+  tag: null,
   sort: 'attention',
   current: null,
   editing: false,
@@ -58,6 +71,7 @@ function syncUrl() {
   if (state.sort !== 'attention') p.set('sort', state.sort);
   if (state.project) p.set('project', state.project);
   if (state.device) p.set('device', state.device);
+  if (state.tag) p.set('tag', state.tag);
   const qs = p.toString();
   history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
 }
@@ -75,6 +89,7 @@ function readUrl() {
   }
   state.project = p.get('project') || null;
   state.device = p.get('device') || null;
+  state.tag = p.get('tag') || null;
 }
 function esc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -196,10 +211,13 @@ async function scan() {
 
 function filterSkills() {
   const v = VIEWS.find((x) => x.id === state.view) || VIEWS[0];
-  let list = state.data.skills.filter((s) => (v.archived ? s.meta.archived : !s.meta.archived));
-  list = list.filter(v.fn);
+  let list = state.data.skills.filter((s) => inView(s, v));
   if (state.device) list = list.filter((s) => s.device === state.device);
   if (state.project) list = list.filter((s) => s.project === state.project);
+  if (state.tag) {
+    const t = state.tag.toLowerCase();
+    list = list.filter((s) => (s.meta.tags || []).some((x) => x.toLowerCase() === t));
+  }
   if (state.q) {
     const q = state.q.toLowerCase();
     list = list.filter((s) =>
@@ -226,7 +244,7 @@ function filterSkills() {
 }
 
 function render() {
-  const active = state.data.skills.filter((s) => !s.meta.archived);
+  const active = state.data.skills.filter((s) => !s.meta.archived && !s.flags.disabled);
 
   const drift = active.filter((s) => s.flags.drift).length;
   const dup = active.filter((s) => s.flags.dup).length;
@@ -252,7 +270,7 @@ function render() {
   nav.innerHTML = '';
   const all = state.data.skills;
   for (const v of VIEWS) {
-    const n = all.filter((s) => (v.archived ? s.meta.archived : !s.meta.archived)).filter(v.fn).length;
+    const n = all.filter((s) => inView(s, v)).length;
     const li = el('li');
     li.dataset.view = v.id;
     if (state.view === v.id) li.classList.add('active');
@@ -266,7 +284,7 @@ function render() {
   const devList = $('#devList');
   devList.innerHTML = '';
   const devs = {};
-  all.forEach((s) => { if (!s.meta.archived) devs[s.device] = (devs[s.device] || 0) + 1; });
+  all.forEach((s) => { if (!s.meta.archived && !s.flags.disabled) devs[s.device] = (devs[s.device] || 0) + 1; });
   const liAllDev = el('li');
   if (!state.device) liAllDev.classList.add('active');
   liAllDev.appendChild(el('span', null, '全部位置'));
@@ -285,7 +303,7 @@ function render() {
   const projList = $('#projList');
   projList.innerHTML = '';
   const projs = {};
-  all.forEach((s) => { if (!s.meta.archived) projs[s.project] = (projs[s.project] || 0) + 1; });
+  all.forEach((s) => { if (!s.meta.archived && !s.flags.disabled) projs[s.project] = (projs[s.project] || 0) + 1; });
   const pli = el('li');
   if (!state.project) pli.classList.add('active');
   pli.appendChild(el('span', null, '全部项目'));
@@ -300,6 +318,33 @@ function render() {
     li.onclick = () => { state.project = state.project === p ? null : p; render(); };
     projList.appendChild(li);
   });
+
+  // tags - the fastest way to answer "what did I file this under"
+  const tagList = $('#tagList');
+  tagList.innerHTML = '';
+  const tags = state.data.tags || [];
+  const liAllTag = el('li');
+  if (!state.tag) liAllTag.classList.add('active');
+  liAllTag.appendChild(el('span', null, '全部标签'));
+  liAllTag.onclick = () => { state.tag = null; render(); };
+  tagList.appendChild(liAllTag);
+  if (!tags.length) {
+    const li = el('li');
+    li.appendChild(el('span', null, '还没有标签'));
+    li.style.color = 'var(--faint)';
+    tagList.appendChild(li);
+  }
+  for (const { tag, n } of tags.slice(0, 40)) {
+    const li = el('li');
+    const on = state.tag && state.tag.toLowerCase() === tag.toLowerCase();
+    if (on) li.classList.add('active');
+    li.appendChild(el('span', null, tag));
+    li.appendChild(el('span', 'cnt', n));
+    li.title = n + ' 个技能打了这个标签';
+    li.onclick = () => { state.tag = on ? null : tag; render(); };
+    tagList.appendChild(li);
+  }
+  $('#tagClear').hidden = !state.tag;
 
   // meta line
   const sm = state.data;
@@ -318,6 +363,7 @@ function render() {
 
   for (const s of list) {
     const tr = document.createElement('tr');
+    if (s.flags.disabled) tr.classList.add('row-off');
 
     const tdDot = el('td', 'c-dot');
     tdDot.appendChild(el('span', 'dot ' + s.status));
@@ -325,6 +371,7 @@ function render() {
 
     const tdName = el('td', 'c-name');
     const nm = el('div', 'skill-name', s.name);
+    if (s.flags.disabled) nm.appendChild(el('span', 'chip off', '已停用'));
     if (s.kind === 'vendor') nm.appendChild(el('span', 'chip vendor', '第三方'));
     tdName.appendChild(nm);
     tdName.appendChild(el('div', 'skill-desc', s.description || '（无描述）'));
@@ -405,6 +452,12 @@ function render() {
       const b = el('button', 'btn sm', '清除搜索');
       b.onclick = () => { state.q = ''; $('#q').value = ''; render(); };
       empty.appendChild(b);
+    } else if (state.tag) {
+      empty.appendChild(el('h3', null, '没有技能带「' + state.tag + '」这个标签'));
+      empty.appendChild(el('p', null, '标签在技能详情的「笔记」里添加，也可以批量：skilltidy tag <名字> --add ' + state.tag));
+      const b = el('button', 'btn sm', '清除标签');
+      b.onclick = () => { state.tag = null; render(); };
+      empty.appendChild(b);
     } else if (state.project || state.device) {
       empty.appendChild(el('h3', null, '这个筛选下没有符合条件的技能'));
       empty.appendChild(el('p', null, '当前限定在' + [state.device, projName(state.project)].filter(Boolean).join(' · ')));
@@ -430,7 +483,7 @@ function render() {
 async function openDrawer(s) {
   state.current = s;
   state.editing = false;
-  state.fileSel = 'SKILL.md';
+  state.fileSel = (s.file || 'SKILL.md').split(/[\\/]/).pop();
   history.replaceState(null, '', location.pathname + location.search + '#' + s.id);
   $('#drawer').hidden = false;
   $('#backdrop').hidden = false;
@@ -461,19 +514,51 @@ function renderDrawerMeta(s) {
   box.appendChild(el('span', 'chip', projLabel(s)));
   box.appendChild(el('span', 'chip', '更新于 ' + relTime(s.mtime)));
   box.appendChild(el('span', 'chip', '上次确认 ' + (s.meta.reviewedAt ? relTime(new Date(s.meta.reviewedAt).getTime()) : '从没')));
+  if (s.flags.disabled) box.appendChild(el('span', 'chip off', '已停用 · agent 不会加载'));
   if (s.flags.dup) box.appendChild(el('span', 'chip dup', '同名 ×' + s.dupCount + (s.sameContentCount > 1 ? ' · 同内容 ×' + s.sameContentCount : '')));
   if (s.flags.drift) {
     const c = el('span', 'chip drift', '技能上次改动后，仓库又提交了 ' + s.driftCommits + ' 次');
     c.title = s.skillCommit ? '技能最后改动于 ' + s.skillCommit : '';
     box.appendChild(c);
   }
+  for (const t of (s.meta.tags || [])) box.appendChild(el('span', 'chip tag', t));
   $('#dStar').textContent = s.meta.star ? '取消收藏' : '收藏';
   $('#dArchive').textContent = s.meta.archived ? '取消归档' : '归档';
+  const tgl = $('#dToggle');
+  tgl.textContent = s.flags.disabled ? '启用' : '停用';
+  tgl.title = s.flags.disabled
+    ? '改名回 SKILL.md，agent 会重新加载它'
+    : '改名 SKILL.md → SKILL.md.disabled，agent 不再加载它（不会删除任何内容）';
+  tgl.classList.toggle('danger', !s.flags.disabled);
 }
 
 function renderMetaFields(s) {
-  $('#dTags').value = (s.meta.tags || []).join(', ');
+  $('#dTags').value = (s.meta.mineTags || []).join(', ');
   $('#dNote').value = s.meta.note || '';
+  renderTagSuggest(s.meta.mineTags || []);
+}
+
+/** Single click to reuse a tag you already use elsewhere, instead of retyping. */
+function renderTagSuggest(tags) {
+  const box = $('#dTagSuggest');
+  box.innerHTML = '';
+  const have = tags.map((t) => t.toLowerCase());
+  const pool = (state.data.tags || [])
+    .filter((t) => !have.includes(t.tag.toLowerCase()))
+    .slice(0, 16);
+  if (!pool.length) return;
+  box.appendChild(el('span', 'suggest-label', '已有标签'));
+  for (const { tag, n } of pool) {
+    const b = el('button', 'chip tag-btn', tag);
+    b.title = n + ' 个技能用过这个标签';
+    b.onclick = () => {
+      const cur = $('#dTags').value.split(/[,，]/).map((x) => x.trim()).filter(Boolean);
+      if (!cur.some((x) => x.toLowerCase() === tag.toLowerCase())) cur.push(tag);
+      $('#dTags').value = cur.join(', ');
+      renderTagSuggest(cur);
+    };
+    box.appendChild(b);
+  }
 }
 
 function switchTab(name) {
@@ -513,12 +598,15 @@ function closeDrawer() {
 
 async function patchMeta(patch) {
   if (!state.current) return;
-  const r = await api('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: state.current.id, patch }) });
-  Object.assign(state.current.meta, r.meta || patch);
-  const fresh = state.data.skills.find((x) => x.id === state.current.id);
-  if (fresh) Object.assign(fresh.meta, state.current.meta);
+  const id = state.current.id;
+  await api('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, patch }) });
+  // Re-read the decorated state instead of patching it by hand: flags, status,
+  // the merged tag list and the tag histogram all depend on the rules layer.
+  state.data = await api('/api/state');
+  const fresh = state.data.skills.find((x) => x.id === id);
+  if (fresh) state.current = fresh;
   render();
-  renderDrawerMeta(state.current);
+  if (fresh) { renderDrawerMeta(fresh); renderMetaFields(fresh); }
 }
 
 function bind() {
@@ -526,6 +614,7 @@ function bind() {
   $('#sort').onchange = (e) => { state.sort = e.target.value; render(); };
   $('#btnScan').onclick = scan;
   $('#devClear').onclick = () => { state.device = null; render(); };
+  $('#tagClear').onclick = () => { state.tag = null; render(); };
   $('#backdrop').onclick = closeDrawer;
   $('#dClose').onclick = closeDrawer;
 
@@ -542,6 +631,42 @@ function bind() {
     const want = !state.current.meta.archived;
     await patchMeta({ archived: want });
     if (want) closeDrawer();
+  };
+  // The one button in here that changes the disk. A disabled skill is the same
+  // file renamed, so it can always be turned back on from this same place.
+  $('#dToggle').onclick = async () => {
+    const s = state.current;
+    if (!s) return;
+    const enable = !!s.flags.disabled;
+    if (!enable) {
+      const ok = confirm(
+        '停用「' + s.name + '」？\n\n'
+        + '做法是把 SKILL.md 改名为 SKILL.md.disabled，内容一个字节都不会动。\n'
+        + 'agent 会立刻不再加载它，随时可以在这里点「启用」恢复。\n\n'
+        + '注意：如果这个目录在 git 仓库里，改名会显示为一次文件变更。'
+      );
+      if (!ok) return;
+    }
+    const btn = $('#dToggle');
+    btn.disabled = true;
+    try {
+      const r = await api('/api/toggle', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: s.id, enabled: enable })
+      });
+      state.data = r.state;
+      const fresh = state.data.skills.find((x) => x.id === s.id);
+      state.current = fresh || s;
+      if (fresh) state.fileSel = (fresh.file || 'SKILL.md').split(/[\\/]/).pop();
+      render();
+      if (fresh) { renderDrawerMeta(fresh); renderMetaFields(fresh); }
+      $('#dSaveHint').textContent = enable ? '已启用' : '已停用';
+      setTimeout(() => { $('#dSaveHint').textContent = ''; }, 1800);
+    } catch (e) {
+      alert('操作失败：' + e.message);
+    } finally {
+      btn.disabled = false;
+    }
   };
   $('#dOpen').onclick = async () => {
     await api('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: state.current.id }) });

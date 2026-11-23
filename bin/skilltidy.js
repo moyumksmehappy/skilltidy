@@ -8,7 +8,10 @@ const COMMANDS = {
   scan: () => require('../lib/commands/scan'),
   check: () => require('../lib/commands/check'),
   ui: () => require('../lib/commands/ui'),
-  open: () => require('../lib/commands/open')
+  open: () => require('../lib/commands/open'),
+  disable: () => (argv) => require('../lib/commands/toggle')(argv, false),
+  enable: () => (argv) => require('../lib/commands/toggle')(argv, true),
+  tag: () => require('../lib/commands/tag')
 };
 
 const HELP = `
@@ -23,6 +26,9 @@ const HELP = `
     check             CI gate: exit 1 when skills are stale / duplicated / drifted
     ui                open the local dashboard  (default command)
     open <name|id>    reveal a skill folder in the file manager
+    disable <name|id> rename SKILL.md to SKILL.md.disabled so agents stop loading it
+    enable <name|id>  rename it back
+    tag <name|id>     add or remove tags  (--add a,b --remove c, --list)
 
   options
     --port <n>        ui port (default 7788)
@@ -39,8 +45,11 @@ const HELP = `
     npx skilltidy scan --limit 40
     npx skilltidy ui
     npx skilltidy check --fail-on stale,dup --days 60
+    npx skilltidy disable diagnose
+    npx skilltidy tag deploy-runbook --add deploy,ops
 
   state lives in ~/.skilltidy (override with SKILLTIDY_HOME)
+  disable/enable are the only commands that touch your skill folders.
 `;
 
 async function main(argv) {

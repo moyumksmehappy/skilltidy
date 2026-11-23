@@ -1,7 +1,7 @@
 {
   "name": "skilltidy",
-  "version": "0.2.0",
-  "description": "Find the skills that stopped being true: count the commits that landed after each SKILL.md was last touched, group duplicate copies across Windows and WSL, and keep a ledger of what you already confirmed.",
+  "version": "0.3.0",
+  "description": "Find the skills that stopped being true: count the commits that landed after each SKILL.md was last touched, group duplicate copies across Windows and WSL, tag them, keep a ledger of what you confirmed, and turn off the ones you no longer want loaded.",
   "license": "MIT",
   "type": "commonjs",
   "bin": {
@@ -37,6 +37,8 @@
     "drift",
     "inventory",
     "maintenance",
+    "tags",
+    "disable",
     "audit"
   ],
   "repository": {

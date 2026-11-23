@@ -54,10 +54,13 @@ and inside every WSL distro.
 | Command | What it does |
 |---|---|
 | `skilltidy init` | Detect scan roots, write the config. `--force` to redo. |
-| `skilltidy scan` | List skills ordered by how much attention they need. `--json`, `--limit n` |
+| `skilltidy scan` | List skills ordered by how much attention they need. `--json`, `--limit n`, `--all` |
 | `skilltidy check` | CI gate. Exits 1 when the rules you name are violated. |
 | `skilltidy ui` | Local dashboard. `--port n`, `--no-open` |
 | `skilltidy open <name>` | Reveal a skill folder in Explorer / Finder / xdg-open |
+| `skilltidy disable <name>` | Turn a skill off so agents stop loading it — see below |
+| `skilltidy enable <name>` | Turn it back on |
+| `skilltidy tag <name> --add a,b` | Add or remove tags. `--list` shows the histogram |
 
 ## What the states mean
 
@@ -68,6 +71,7 @@ and inside every WSL distro.
 | `due` | You confirmed it `reviewDays` ago, time to look again | 45 days |
 | `stale` | `SKILL.md` untouched for longer than `staleDays` — informational, not a decision | 90 days |
 | `never` | Never confirmed. The initial state of everything | — |
+| `off` | Disabled: the manifest is renamed, agents skip it, nothing asks for attention | — |
 
 Only `drift` and `dup` are **decisions**: cases where the tool can point at evidence
 that something is off. "You have not looked at this yet" is bookkeeping, not a finding.
@@ -75,6 +79,51 @@ that something is off. "You have not looked at this yet" is bookkeeping, not a f
 "Confirm still holds" is the load-bearing action. It writes no files — it records that
 you looked at the skill and decided it is still correct, and a confirmation newer than
 the newest commit settles the drift.
+
+## Turning a skill off
+
+There is exactly one action in this tool that changes your files, and it is a rename:
+
+```
+SKILL.md  ->  SKILL.md.disabled
+```
+
+That is the whole implementation. Agent tools look for a file called `SKILL.md`, so
+the skill stops being loaded. Nothing is moved, nothing is edited, no content is
+touched — the same bytes are still there, under a name the agent ignores. Renaming it
+back is the entire undo, and `skilltidy enable` does exactly that.
+
+Why a rename rather than a flag in `meta.json`: a flag would only make the dashboard
+*look* like the skill is off while the agent kept loading it. If the point is to stop
+it from being used, the file has to be the thing that changes.
+
+Three consequences worth knowing:
+
+- **The dashboard keeps showing it.** Scanning looks for both names, so a disabled
+  skill stays in the "已停用 / disabled" view with its tags, notes and history intact.
+  A skill you cannot see is a skill you cannot turn back on.
+- **git sees it.** If the skill lives in a repo, the rename is a normal file change
+  (a delete plus an add). Commit it if you want the state to travel with the repo, or
+  gitignore `*.disabled` if you want it local only.
+- **Disabled skills drop out of every rule.** No drift, no duplicate, no stale, no
+  `check --fail-on` failure. You answered the question already; it is not asking again.
+
+## Tags
+
+Tags live in `~/.skilltidy/meta.json` and never in your skill files, so they cost
+nothing to add and sync between machines with the rest of the state. A skill's
+frontmatter `tags:` are shown too — merged and de-duplicated — but they are treated as
+read-only, because they belong to the file.
+
+The dashboard has a tag list in the sidebar (click to filter, combine with a view or a
+project) and one-click reuse of an existing tag in the drawer, so you do not end up with
+`backend`, `Backend` and `后端` as three different things. From the terminal:
+
+```bash
+skilltidy tag deploy-runbook --add deploy,ops
+skilltidy tag "diagnose" --remove temp
+skilltidy tag --list
+```
 
 ## How drift is measured
 
@@ -194,7 +243,9 @@ far enough that the instructions are probably lying.
 ## Non-goals
 
 Not a package manager, not a registry, not a desktop app, not a SaaS.
-It reads what other tools wrote and tells you the truth about it.
+It reads what other tools wrote and tells you the truth about it, with one deliberate
+exception: `disable` / `enable` renames the manifest, because "stop the agent from
+loading this" cannot be done by reading.
 
 ## 中文速览
 
@@ -209,10 +260,16 @@ It reads what other tools wrote and tells you the truth about it.
 npx skilltidy init   # 自动探测本机与 WSL 里的技能目录
 npx skilltidy scan   # 看看自己到底写了多少，哪些需要决策
 npx skilltidy ui     # 打开看板 http://127.0.0.1:7788
+npx skilltidy disable diagnose   # 停用：改名成 SKILL.md.disabled
+npx skilltidy tag deploy-runbook --add deploy,ops
 ```
 
 零依赖、不联网、默认只读。星标/标签/备注/确认记录存在 `~/.skilltidy/meta.json`，
 可以跨设备导出导入。详见 `examples/config.windows-wsl.json`。
+
+**停用**是唯一会动你文件的动作，做法就是改名 `SKILL.md` → `SKILL.md.disabled`：
+内容一个字节不改，agent 不再加载它，改回来就是完整恢复（`skilltidy enable`）。
+看板仍会列出它（「已停用」视图），否则你没法把它再打开。
 
 ## License
 

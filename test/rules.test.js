@@ -173,3 +173,52 @@ test('skillId is stable across absolute locations with the same root id', () => 
   assert.strictEqual(a, b);
   assert.notStrictEqual(a, c);
 });
+
+test('a disabled skill stops asking for decisions', () => {
+  const s = rules.decorate(skill({ disabled: true, driftCommits: 500, dupCount: 5, projectHeadAt: ago(1) }), null, {});
+  assert.strictEqual(s.flags.disabled, true);
+  assert.strictEqual(s.decision, null, 'you already answered this one');
+  assert.strictEqual(s.status, 'off');
+  assert.strictEqual(rules.needsAttention(s), false);
+});
+
+test('a disabled skill keeps its flags, so the reason is still visible', () => {
+  const s = rules.decorate(skill({ disabled: true, driftCommits: 500, projectHeadAt: ago(1) }), null, {});
+  assert.strictEqual(s.flags.drift, true);
+  assert.strictEqual(s.flags.dup, false);
+});
+
+test('summarize keeps disabled skills out of the totals but counts them', () => {
+  const skills = [
+    rules.decorate(skill({ id: 'a1', name: 'a' }), null, {}),
+    rules.decorate(skill({ id: 'b2', name: 'b', disabled: true }), null, {}),
+    rules.decorate(skill({ id: 'c3', name: 'c' }), { archived: true }, {})
+  ];
+  const st = rules.summarize(skills);
+  assert.strictEqual(st.total, 1);
+  assert.strictEqual(st.disabled, 1);
+  assert.strictEqual(st.archived, 1);
+});
+
+test('tags from the frontmatter and from your notes are merged, not duplicated', () => {
+  const s = rules.decorate(
+    skill({ tags: ['Deploy', 'ops'] }),
+    { tags: ['deploy', '后端'] },
+    {}
+  );
+  assert.deepStrictEqual(s.meta.mineTags, ['deploy', '后端']);
+  assert.deepStrictEqual(s.meta.declaredTags, ['Deploy', 'ops']);
+  assert.deepStrictEqual(s.meta.tags, ['deploy', '后端', 'ops'], 'case-insensitive union, yours first');
+});
+
+test('tagCounts ignores the case of a tag and sorts by use', () => {
+  const skills = [
+    rules.decorate(skill({ id: 'x1' }), { tags: ['Deploy'] }, {}),
+    rules.decorate(skill({ id: 'x2' }), { tags: ['deploy', 'ops'] }, {}),
+    rules.decorate(skill({ id: 'x3' }), { tags: ['ops'] }, {})
+  ];
+  const counts = rules.tagCounts(skills);
+  assert.strictEqual(counts.length, 2);
+  assert.strictEqual(counts[0].n, 2);
+  assert.strictEqual(counts[0].tag.toLowerCase(), 'deploy');
+});
