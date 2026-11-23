@@ -1,5 +1,7 @@
 # SkillTidy
 
+[简体中文](https://github.com/moyumksmehappy/skilltidy/blob/main/README.zh-CN.md) | **English**
+
 **Know which skills still hold, and which ones you already checked.**
 
 `apm` and `asm` get skills *installed*. Nothing looks after them afterwards: the skill
@@ -247,29 +249,19 @@ It reads what other tools wrote and tells you the truth about it, with one delib
 exception: `disable` / `enable` renames the manifest, because "stop the agent from
 loading this" cannot be done by reading.
 
-## 中文速览
+## 中文说明
 
-`apm`/`asm` 管技能怎么装，SkillTidy 管技能还成不成立。
+完整中文文档在 [README.zh-CN.md](https://github.com/moyumksmehappy/skilltidy/blob/main/README.zh-CN.md)。
 
-它只回答两个问题：**哪一份才是正本**，以及**你上次确认它还成立是什么时候**。
-
-「项目已领先」数的是提交次数 —— 技能上次改动之后，仓库又提交了多少次，而不是
-文件放了多久。放了一年但流程没变，不算问题；上周改的却指向一个已经改名的参数，才算。
+一句话：`apm`/`asm` 管技能怎么装，SkillTidy 管技能还成不成立。它只回答两个问题——**哪一份是正本**，以及**你上次确认它还成立是什么时候**。「项目已领先」数的是技能停更之后仓库又提交了多少次，不是文件放了多久。
 
 ```bash
 npx skilltidy init   # 自动探测本机与 WSL 里的技能目录
 npx skilltidy scan   # 看看自己到底写了多少，哪些需要决策
 npx skilltidy ui     # 打开看板 http://127.0.0.1:7788
-npx skilltidy disable diagnose   # 停用：改名成 SKILL.md.disabled
-npx skilltidy tag deploy-runbook --add deploy,ops
 ```
 
-零依赖、不联网、默认只读。星标/标签/备注/确认记录存在 `~/.skilltidy/meta.json`，
-可以跨设备导出导入。详见 `examples/config.windows-wsl.json`。
-
-**停用**是唯一会动你文件的动作，做法就是改名 `SKILL.md` → `SKILL.md.disabled`：
-内容一个字节不改，agent 不再加载它，改回来就是完整恢复（`skilltidy enable`）。
-看板仍会列出它（「已停用」视图），否则你没法把它再打开。
+零依赖、不联网、默认只读。唯一的例外是 `disable` / `enable`：它把 `SKILL.md` 改名成 `SKILL.md.disabled`，让 agent 不再加载这个技能——内容一个字节不改，改回来就是完整恢复。
 
 ## License
 
