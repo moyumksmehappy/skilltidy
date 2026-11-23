@@ -1,6 +1,6 @@
 # SkillTidy
 
-[简体中文](https://github.com/moyumksmehappy/skilltidy/blob/main/README.zh-CN.md) | **English**
+**English** | [简体中文](https://github.com/moyumksmehappy/skilltidy/blob/main/README.zh-CN.md)
 
 **Know which skills still hold, and which ones you already checked.**
 

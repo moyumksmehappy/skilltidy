@@ -1,6 +1,6 @@
 # SkillTidy
 
-[English](README.md) | **简体中文**
+[English](https://github.com/moyumksmehappy/skilltidy/blob/main/README.md) | **简体中文**
 
 **知道哪些技能还成立，哪些你已经确认过。**
 
